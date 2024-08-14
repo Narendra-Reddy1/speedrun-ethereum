@@ -60,11 +60,10 @@ const deployYourContract: DeployFunction = async function (hre: HardhatRuntimeEn
   await balloons.approve(dexAddress, hre.ethers.parseEther("100"));
 
   console.log("INIT exchange...");
-  await dex.init(hre.ethers.parseEther("5"), {
-    value: hre.ethers.parseEther("5"),
+  await dex.init(hre.ethers.parseEther(".1"), {
+    value: hre.ethers.parseEther(".1"),
     gasLimit: 200000,
   });
-  await balloons.approve(dexAddress, ethers.parseEther("100"));
 };
 
 export default deployYourContract;

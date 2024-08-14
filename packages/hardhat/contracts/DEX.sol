@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
@@ -161,19 +161,25 @@ contract DEX {
 	 * wallet with respect to the price outlined by the AMM.
 	 */
 	function deposit() public payable returns (uint256 tokensDeposited) {
-		require(msg.value > 0, "DEX: trying to deposit 0 ETH");
-		uint256 ethLiquidity = address(this).balance - msg.value;
+		require(msg.value > 0, "Must send value when depositing");
+		uint256 ethReserve = address(this).balance - msg.value;
 		uint256 tokenReserve = token.balanceOf(address(this));
-		uint256 tokenOutput = price(msg.value, ethLiquidity, tokenReserve);
-		uint256 tokenDepost = tokenOutput / ethLiquidity;
-		//liquidity[msg.sender] = tokenOutput;
-		console.logUint(tokenOutput);
-		if (token.transferFrom(msg.sender, address(this), tokenOutput)) {
-			totalLiquidity += tokenOutput;
-			tokensDeposited = tokenOutput;
-		}
-		// 	emit EthToTokenSwap(msg.sender, tokenOutput, msg.value);
-		// else revert("ethToToken(): reverted swap.");
+		uint256 tokenDeposit;
+
+		tokenDeposit = ((msg.value * tokenReserve) / ethReserve) + 1;
+
+		uint256 liquidityMinted = (msg.value * totalLiquidity) / ethReserve;
+		liquidity[msg.sender] += liquidityMinted;
+		totalLiquidity += liquidityMinted;
+
+		require(token.transferFrom(msg.sender, address(this), tokenDeposit));
+		emit LiquidityProvided(
+			msg.sender,
+			liquidityMinted,
+			msg.value,
+			tokenDeposit
+		);
+		return tokenDeposit;
 	}
 
 	/**
@@ -183,5 +189,24 @@ contract DEX {
 	 */
 	function withdraw(
 		uint256 amount
-	) public returns (uint256 eth_amount, uint256 token_amount) {}
+	) public returns (uint256 eth_amount, uint256 token_amount) {
+		require(
+			liquidity[msg.sender] >= amount,
+			"withdraw: sender does not have enough liquidity to withdraw."
+		);
+		uint256 ethReserve = address(this).balance;
+		uint256 tokenReserve = token.balanceOf(address(this));
+		uint256 ethWithdrawn;
+
+		ethWithdrawn = (amount * ethReserve) / totalLiquidity;
+
+		uint256 tokenAmount = (amount * tokenReserve) / totalLiquidity;
+		liquidity[msg.sender] -= amount;
+		totalLiquidity -= amount;
+		(bool sent, ) = payable(msg.sender).call{ value: ethWithdrawn }("");
+		require(sent, "withdraw(): revert in transferring eth to you!");
+		require(token.transfer(msg.sender, tokenAmount));
+		emit LiquidityRemoved(msg.sender, amount, tokenAmount, ethWithdrawn);
+		return (ethWithdrawn, tokenAmount);
+	}
 }
